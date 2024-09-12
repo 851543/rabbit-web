@@ -2,36 +2,61 @@
 
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
+import { useUserStore } from './user'
+import { insertCartAPI, findNewCartListAPI, delCartAPI } from '@/api/cart'
 
 export const useCartStore = defineStore(
   'cart',
   () => {
     // 1. 定义state - cartList
     const cartList = ref([])
+    const userStore = useUserStore()
+    const isLogin = computed(() => (userStore.userInfo as { token: any }).token)
     // 2. 定义action - addCart
-    const addCart = (goods: never) => {
-      // 添加购物车操作
-      // 已添加过 - count + 1
-      // 没有添加过 - 直接push
-      // 思路：通过匹配传递过来的商品对象中的skuId能不能在cartList中找到，找到了就是添加过
-      const item = cartList.value.find(
-        (item) => (goods as { skuId: any }).skuId === (item as { skuId: any }).skuId
-      )
-      if (item) {
-        // 找到了
-        ;(item as { count: any }).count += (goods as { count: any }).count
+    const addCart = async (goods: never) => {
+      const { skuId, count } = goods
+      if (isLogin.value) {
+        // 登录之后的加入购车逻辑
+        await insertCartAPI({ skuId, count })
+        updateNewList()
       } else {
-        // 没找到
-        cartList.value.push(goods)
+        // 添加购物车操作
+        // 已添加过 - count + 1
+        // 没有添加过 - 直接push
+        // 思路：通过匹配传递过来的商品对象中的skuId能不能在cartList中找到，找到了就是添加过
+        const item = cartList.value.find(
+          (item) => (goods as { skuId: any }).skuId === (item as { skuId: any }).skuId
+        )
+        if (item) {
+          // 找到了
+          ;(item as { count: any }).count += (goods as { count: any }).count
+        } else {
+          // 没找到
+          cartList.value.push(goods)
+        }
       }
     }
     // 删除购物车
     const delCart = async (skuId: any) => {
-      // 思路：
-      // 1. 找到要删除项的下标值 - splice
-      // 2. 使用数组的过滤方法 - filter
-      const idx = cartList.value.findIndex((item) => skuId === (item as { skuId: any }).skuId)
-      cartList.value.splice(idx, 1)
+      if (isLogin.value) {
+        await delCartAPI([skuId])
+        updateNewList()
+      } else {
+        // 思路：
+        // 1. 找到要删除项的下标值 - splice
+        // 2. 使用数组的过滤方法 - filter
+        const idx = cartList.value.findIndex((item) => skuId === (item as { skuId: any }).skuId)
+        cartList.value.splice(idx, 1)
+      }
+    }
+
+    const clearCart = () => {
+      cartList.value = []
+    }
+
+    const updateNewList = async () => {
+      const res: any = await findNewCartListAPI()
+      cartList.value = res.result
     }
     // 单选功能
     const singleCheck = (skuId: any, selected: any) => {
@@ -75,6 +100,8 @@ export const useCartStore = defineStore(
       addCart,
       singleCheck,
       allCheck,
+      clearCart,
+      updateNewList,
       isAll,
       allCount,
       allPrice,
